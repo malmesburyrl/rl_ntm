@@ -22,6 +22,20 @@ class Tape():
         else:
             pass
 
+    def display(self):
+        chr_str = ""
+        for i in self.tape_data:
+            chr_str += self.int_to_symbol(i)
+        return chr_str
+
+    def int_to_symbol(self, val):
+
+        symbols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]
+        if val == self.blank_char:
+            return " "
+        else:
+            return symbols[val]
+
     def query(self, address):
         if address >= 0 and address < self.tape_length:
             return self.tape_data[address]
@@ -29,8 +43,9 @@ class Tape():
             return self.blank_char
 
 
-class WriteOnlyTape(Tape):
-    pass
+# class OutputTape(Tape):
+#     def __init__(self, tape_data, blank_char=5):
+#         super().__init__(length, length)
 
 
 class Memory():
