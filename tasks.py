@@ -7,7 +7,7 @@ import interfaces  # noqa
 
 
 class Copy():
-    def __init__(self, string_len=5, max_char=5):
+    def __init__(self, string_len=5, max_char=5, max_step=100):
         self.string_len = string_len
         self.max_char = max_char
         self.blank_char = max_char+1
@@ -25,8 +25,23 @@ class Copy():
         self.TargetTape = interfaces.Tape(
             target_data, blank_char=self.blank_char)
 
+        self.max_step = max_step
+        self.curr_step = 0
+
+        # Define Rewards
+        self.correct_output_reward = 1
+        self.no_action_reward = 0
+        self.incorrect_output_reward = -1
+
     def reset(self):
-        self.__init__(self.string_len, self.max_char)
+        self.__init__(self.string_len, self.max_char, self.max_step)
+        observation = self.InputTape.read_head()
+        reward = 0
+        target = self.TargetTape.read_head()  # expected output
+        done = False
+        info = None
+
+        return observation, reward, target, done, info
 
     def render(self):
         print("Input Tape: ", self.InputTape.display())
@@ -51,10 +66,13 @@ class Copy():
             self.OutputTape.move_head(1)
             self.TargetTape.move_head(1)
 
-        reward = 0
+        reward = self.no_action_reward
         done = False
         info = None
 
+        self.curr_step += 1
+        if self.curr_step > self.max_step:
+            done = True
         return observation, reward, target, done, info
 
 
