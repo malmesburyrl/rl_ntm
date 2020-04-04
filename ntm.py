@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+import tensorflow_probability as tfp
 
 
 class NTM():
@@ -81,23 +82,48 @@ class NTM():
             # [batch_size, vector_len]
             output = self.model(
                 {'tape_input': tape_input, 'memory_input': memory_input})
+            #output : [output_content, output_bool, input_head_control, memory_head_control, memory_content]
             output_pred = output[0]
+            output_bool = output[1]
+            input_head_control = output[2]
+            memory_head_control = output[3]
+            memory_content = output[4]
+
             if True:
-                loss = keras.losses.categorical_crossentropy(
+                output_loss = keras.losses.categorical_crossentropy(
                     output_target, output_pred)
-            print(output_pred)
+
         if True:
             # if self.update_steps % 10 == 0:
-            print("Loss: ", loss.numpy())
-            self.update(loss)
-            #output : [output_content, output_bool, input_head_control, memory_head_control, memory_content]
+            print("Loss: ", output_loss.numpy())
+            self.update(output_loss)
 
-            return True
+        # over ride for now
+        output_bool = tf.constant([[0., 1.]])
+        input_head_control = tf.constant([[0., 1.]])
+        print(output_bool.numpy().shape)
+        # print(output_bool)
+        sampled_output_pred = tf.random.categorical(
+            tf.math.log(output_pred), num_samples=1)
+        sampled_output_bool = tf.random.categorical(
+            tf.math.log(output_bool), num_samples=1)
+        sampled_input_head_control = tf.random.categorical(
+            tf.math.log(input_head_control), num_samples=1)
+
+        return sampled_output_pred.numpy()[0, 0], sampled_output_bool.numpy()[0, 0], sampled_input_head_control.numpy()[0, 0]
 
     def update(self, fx):
         grads = self.Tape.gradient(fx, self.model.trainable_weights)
-        self.Optimizer.apply_gradients(
-            zip(grads, self.model.trainable_weights))
+        # self.Optimizer.apply_gradients(
+        #     zip(grads, self.model.trainable_weights))
+
+        # Hacky way so you don't get errors for variables which aren't training
+        self.Optimizer.apply_gradients([
+            (grad, var)
+            for (grad, var) in zip(grads, self.model.trainable_variables)
+            if grad is not None
+        ])
+
         self.Tape = tf.GradientTape()
 
         self.update_steps += 1
