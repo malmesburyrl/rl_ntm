@@ -66,7 +66,7 @@ class Copy():
             self.OutputTape.move_head(1)
             self.TargetTape.move_head(1)
 
-        reward = self.no_action_reward
+        reward = 0
         done = False
         info = None
 
