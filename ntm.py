@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import tensorflow_probability as tfp
+import datetime
 
 
 class NTM():
@@ -54,6 +55,11 @@ class NTM():
         self.Tape = tf.GradientTape()
         self.Optimizer = keras.optimizers.SGD()
 
+        self.last_output_pred = None
+
+        log_dir = "logs/experiment/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.Writer = tf.summary.create_file_writer(log_dir)
+
     def init_memory(self):
 
         self.memory = tf.random.normal([self.mem_slots, self.mem_length])
@@ -68,15 +74,13 @@ class NTM():
 
         return None
 
-    def run(self, tape_input, output_target):
+    def run(self, tape_input):
         """Do Internal Computation inside the NTM"""
 
         tape_input = tf.constant(tape_input, dtype='float32')
         tape_input = tf.reshape(tape_input, [1, -1])
         memory_input = self.memory[self.memory_head, :]
         memory_input = tf.reshape(memory_input, [1, -1])
-
-        output_target = tf.one_hot(output_target, self.num_char)
 
         with self.Tape as t:
             # [batch_size, vector_len]
@@ -89,20 +93,11 @@ class NTM():
             memory_head_control = output[3]
             memory_content = output[4]
 
-            if True:
-                output_loss = keras.losses.categorical_crossentropy(
-                    output_target, output_pred)
-
-        if True:
-            # if self.update_steps % 10 == 0:
-            print("Loss: ", output_loss.numpy())
-            self.update(output_loss)
-
+        self.last_output_pred = output_pred
         # over ride for now
         output_bool = tf.constant([[0., 1.]])
         input_head_control = tf.constant([[0., 1.]])
-        print(output_bool.numpy().shape)
-        # print(output_bool)
+
         sampled_output_pred = tf.random.categorical(
             tf.math.log(output_pred), num_samples=1)
         sampled_output_bool = tf.random.categorical(
@@ -112,18 +107,35 @@ class NTM():
 
         return sampled_output_pred.numpy()[0, 0], sampled_output_bool.numpy()[0, 0], sampled_input_head_control.numpy()[0, 0]
 
-    def update(self, fx):
-        grads = self.Tape.gradient(fx, self.model.trainable_weights)
+    def update(self, output_target, reward=0):
+
+        output_target = tf.one_hot(output_target, self.num_char)
+
+        assert(self.last_output_pred is not None)
+
+        with self.Tape as t:
+            output_loss = keras.losses.categorical_crossentropy(
+                output_target, self.last_output_pred)
+            print("Loss: ", output_loss.numpy())
+
+        with self.Writer.as_default():
+            tf.summary.scalar('output_loss', output_loss.numpy()[0],
+                              step=self.update_steps)
+
+        gradients = self.Tape.gradient(
+            output_loss, self.model.trainable_weights)
+
         # self.Optimizer.apply_gradients(
         #     zip(grads, self.model.trainable_weights))
 
         # Hacky way so you don't get errors for variables which aren't training
         self.Optimizer.apply_gradients([
             (grad, var)
-            for (grad, var) in zip(grads, self.model.trainable_variables)
+            for (grad, var) in zip(gradients, self.model.trainable_variables)
             if grad is not None
         ])
 
+        # Refresh Gradient Tape
         self.Tape = tf.GradientTape()
 
         self.update_steps += 1
