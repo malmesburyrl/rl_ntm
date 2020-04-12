@@ -1,3 +1,6 @@
+import colorize  # noqa
+
+
 class Tape():
 
     def __init__(self, tape_data, blank_char=5):
@@ -8,7 +11,7 @@ class Tape():
         self.blank_char = blank_char
 
     def move_head(self, action):
-        self.pointer += action
+        self.pointer += action  # actions in range [-1,0,1]
 
     def read_head(self):
         if self.pointer >= 0 and self.pointer < self.tape_length:
@@ -24,8 +27,13 @@ class Tape():
 
     def display(self):
         chr_str = ""
-        for i in self.tape_data:
-            chr_str += self.int_to_symbol(i)
+        for i in range(self.tape_length):
+            tape_int = self.tape_data[i]
+            tape_symbol = self.int_to_symbol(i)
+            if i == self.pointer:
+                tape_symbol = colorize.colorize(
+                    tape_symbol, "green", bold=False, highlight=False)
+            chr_str += tape_symbol
         return chr_str
 
     def int_to_symbol(self, val):

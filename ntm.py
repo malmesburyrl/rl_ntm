@@ -51,7 +51,7 @@ class NTM():
         self.model = tf.keras.models.Model(
             inputs=[input_tape_input, memory_input],
             outputs=[output_content, output_bool, input_head_control, memory_head_control, memory_content])
-        self.model.summary()
+        #
 
         self.Tape = tf.GradientTape()
         self.Optimizer = keras.optimizers.SGD()
@@ -65,9 +65,13 @@ class NTM():
         self.Writer = tf.summary.create_file_writer(log_dir)
 
         # Rl Params
-        self.gamma = 0.99
+        self.gamma = 1
 
-        self.no_target_val = 0
+        self.no_target_val = -1
+        self.num_targets = 0
+
+    def summary(self):
+        self.model.summary()
 
     def init_memory(self):
 
@@ -115,7 +119,8 @@ class NTM():
             sampled_output_bool = 1
 
         with self.Tape as t:
-            print(output_bool)
+            # print(output_bool)
+            # print(input_head_control)
             p_action = output_bool[0, sampled_output_bool] * \
                 input_head_control[0, sampled_input_head_control]
 
@@ -125,56 +130,64 @@ class NTM():
         self.action_p_history.append(p_action)
 
         # over ride for now
-        # sampled_output_bool = 1
-        # sampled_input_head_control = 1
+        sampled_output_bool = 1
+        sampled_input_head_control = 2
 
         self.run_time += 1
 
-        # shift input head control by -1
+        # shift range of actions from [0,1,2] -> [-1,0,1]
         sampled_input_head_control -= 1
+
         return sampled_output_pred, sampled_output_bool, sampled_input_head_control
 
     def update_store(self, output_target, done):  # update only once done
         self.output_target_history[-1] = output_target
+        self.num_targets += 1
         if done:
             self.backup()
 
     def backup(self):
 
         num_actions = len(self.action_p_history)
+        assert(len(self.output_pred_history) ==
+               len(self.output_target_history))
+
         with self.Tape as tape:
             total_reward = tf.constant(0.)
             forward_returns = np.zeros([num_actions])
+            debug_target_counter = 0
 
             for i in range(num_actions-1, -1, -1):
                 output_target = self.output_target_history[i]
                 output_pred_dist = self.output_pred_history[i]
+                # print(total_reward)
 
                 scalar_reward = 0
                 if output_target != self.no_target_val:  # a step for which we made a prediction
-
+                    debug_target_counter += 1
                     # log probability of correct class
                     reward = tf.math.log(output_pred_dist[0, output_target])
+                    assert(reward.numpy() < 0)
                     total_reward += reward
                     scalar_reward = reward.numpy()
 
                 # update forward looking return for policy gradient
+                # print(i, scalar_reward)
                 if i+1 == num_actions:
                     forward_returns[i] = scalar_reward
                 else:
                     forward_returns[i] = scalar_reward + \
                         self.gamma*forward_returns[i+1]
 
-            # print(forward_returns)
-
+            assert(debug_target_counter == self.num_targets)
             # optimize this part to improve content
             obj_func = total_reward
             # optimize this part to improve log probability of good actions
-            for j in range(num_actions):
-                obj_func += tf.math.log(
-                    self.action_p_history[j]) * forward_returns[j]
+            # for j in range(num_actions):
+            #     obj_func += tf.math.log(
+            #         self.action_p_history[j]) * forward_returns[j]
 
-            obj_func *= -1  # flip around
+            obj_func *= -1  # flip around beacuse keras optimizers do gradient descent
 
         # print("Objective Function J(0): ", -1 * obj_func.numpy())
         with self.Writer.as_default():
@@ -195,6 +208,9 @@ class NTM():
 
         # Clear run time
         self.run_time = 0
+
+        # Clear num taregts
+        self.num_targets = 0
 
         # Clear Histories
         self.last_output_pred = None
